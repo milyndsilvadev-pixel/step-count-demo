@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StepCount Logger</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --accent-dim: #0ea5e9;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --border: #334155;
+            --green: #22c55e;
+            --red: #ef4444;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        .container { max-width: 720px; margin: 0 auto; padding: 24px; }
+        header {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 24px; padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        h1 { font-size: 1.5rem; letter-spacing: -0.5px; }
+        .badge {
+            margin-left: auto; font-size: 0.75rem; padding: 4px 10px;
+            border-radius: 999px; background: var(--card); color: var(--muted);
+            border: 1px solid var(--border);
+        }
+        .stats {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 16px; text-align: center;
+        }
+        .stat-card .value { font-size: 1.75rem; font-weight: 700; color: var(--accent); }
+        .stat-card .label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+        .add-section {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; margin-bottom: 24px;
+        }
+        .add-section h2 { font-size: 1rem; margin-bottom: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+        .input-group { display: flex; flex-direction: column; gap: 6px; }
+        .input-group label { font-size: 0.85rem; color: var(--muted); }
+        .input-group input {
+            background: #0f172a; border: 1px solid var(--border); color: var(--text);
+            border-radius: 8px; padding: 10px 12px; font-size: 1rem;
+        }
+        .input-group input:focus { outline: none; border-color: var(--accent); }
+        .btn-add {
+            grid-column: 1 / -1; background: var(--accent); color: #000;
+            border: none; border-radius: 8px; padding: 12px; font-weight: 700;
+            font-size: 1rem; cursor: pointer; margin-top: 8px;
+        }
+        .btn-add:hover { background: #7dd3fc; }
+        .btn-add:active { transform: translateY(1px); }
+        .filters {
+            display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .chip {
+            background: var(--card); border: 1px solid var(--border); color: var(--muted);
+            border-radius: 20px; padding: 6px 14px; font-size: 0.85rem; cursor: pointer;
+        }
+        .chip.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700; }
+        .chart-wrap {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; margin-bottom: 24px; position: relative; height: 300px;
+        }
+        .empty {
+            text-align: center; padding: 40px; color: var(--muted);
+        }
+        table { width: 100%; border-collapse: collapse; background: var(--card);
+            border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        th { text-align: left; font-size: 0.8rem; color: var(--muted);
+            padding: 12px 14px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(56,189,248,0.05); }
+        .badge-ok { color: var(--green); font-weight: 700; font-size: 0.85rem; }
+        .badge-empty { color: var(--muted); font-size: 0.85rem; }
+        .footer { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px 0; border-top: 1px solid var(--border); }
+        .toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--card); border: 1px solid var(--border); color: var(--text);
+            padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity 0.2s;
+            pointer-events: none; font-size: 0.9rem;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Step<span style="color:var(--accent)">Count</span> Logger</h1>
+            <div class="badge" id="cacheBadge">Cache: ready</div>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="value" id="statTotal">0</div>
+                <div class="label">Total steps</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="statAvg">0</div>
+                <div class="label">Avg / day</div>
+            </div>
+            <div class="stat-card">
+                <div class="value" id="statDays">0</div>
+                <div class="label">Days logged</div>
+            </div>
+        </div>
+
+        <div class="add-section">
+            <h2>Log your steps</h2>
+            <div class="form-grid">
+                <div class="input-group">
+                    <label>Date</label>
+                    <input type="date" id="dateInput">
+                </div>
+                <div class="input-group">
+                    <label>Steps</label>
+                    <input type="number" id="stepsInput" min="0" placeholder="0">
+                </div>
+                <button class="btn-add" id="btnAdd">Add log</button>
+                <button class="btn-add" id="btnToday" style="background:transparent;color:var(--accent);border:1px solid var(--accent);">Use today</button>
+            </div>
+        </div>
+
+        <div class="filters">
+            <button class="chip active" data-filter="all">All time</button>
+            <button class="chip" data-filter="30">Last 30 days</button>
+            <button class="chip" data-filter="7">Last 7 days</button>
+        </div>
+
+        <div class="chart-wrap">
+            <canvas id="chart"></canvas>
+        </div>
+
+        <table>
+            <thead>
+                <tr><th>Date</th><th>Steps</th><th>Action</th></tr>
+            </thead>
+            <tbody id="logTable"></tbody>
+        </table>
+
+        <div class="footer">
+            Data stored in your browser (localStorage). Steps are cached for instant graph updates.
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Storage + Cache ---------- */
+const STORAGE_KEY = 'stepcount_logs_v1';
+const CACHE_KEY = 'stepcount_cache_v1';
+
+let logs = [];           // array of { date: 'YYYY-MM-DD', steps: number }
+let cache = { dates: [], values: [], total: 0, avg: 0 }; // derived cache
+
+function load() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        logs = raw ? JSON.parse(raw) : [];
+    } catch (e) { logs = []; }
+    try {
+        const c = localStorage.getItem(CACHE_KEY);
+        if (c) cache = JSON.parse(c);
+    } catch (e) {}
+    normalizeLogs();
+}
+
+function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+    writeCache();
+}
+
+function normalizeLogs() {
+    const map = {};
+    logs.forEach((l) => {
+        const d = l.date;
+        if (!map[d] || l.steps > map[d].steps) map[d] = l;
+    });
+    logs = Object.entries(map).map(([date, v]) => ({ date, steps: Number(v.steps) || 0 }));
+    logs.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function writeCache() {
+    const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
+    cache.dates = sorted.map((l) => l.date);
+    cache.values = sorted.map((l) => l.steps);
+    cache.total = sorted.reduce((s, l) => s + l.steps, 0);
+    cache.avg = sorted.length ? (cache.total / sorted.length) : 0;
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    return cache;
+}
+
+function addLog(date, steps) {
+    const s = Math.max(0, Math.floor(Number(steps) || 0));
+    if (!date) date = todayISO();
+    const existing = logs.findIndex((l) => l.date === date);
+    if (existing >= 0) logs[existing].steps = s;
+    else logs.push({ date, steps: s });
+    normalizeLogs();
+    save();
+    return s;
+}
+
+function removeLog(date) {
+    logs = logs.filter((l) => l.date !== date);
+    save();
+}
+
+function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+/* ---------- Filters ---------- */
+let currentFilter = 'all';
+
+function filteredLogs() {
+    const now = new Date();
+    const list = [...logs];
+    if (currentFilter === '7') {
+        const from = new Date(now); from.setDate(now.getDate() - 6);
+        const fromISO = from.toISOString().slice(0, 10);
+        return list.filter((l) => l.date >= fromISO);
+    }
+    if (currentFilter === '30') {
+        const from = new Date(now); from.setDate(now.getDate() - 29);
+        const fromISO = from.toISOString().slice(0, 10);
+        return list.filter((l) => l.date >= fromISO);
+    }
+    return list;
+}
+
+/* ---------- Chart ---------- */
+let chart = null;
+
+function initChart() {
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'Steps', data: [], backgroundColor: 'rgba(56,189,248,0.7)', borderRadius: 6 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+            scales: {
+                x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#1e293b' } },
+                y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#1e293b' }, beginAtZero: true, title: { display: true, text: 'Steps', color: '#94a3b8' } }
+            },
+            animation: { duration: 400 }
+        }
+    });
+}
+
+function renderChart() {
+    const data = filteredLogs();
+    const labels = data.map((l) => formatDate(l.date));
+    const values = data.map((l) => l.steps);
+    const sum = values.reduce((a, b) => a + b, 0);
+
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = values;
+    chart.options.plugins.tooltip.callbacks = {
+        label: (ctx) => `Steps: ${ctx.parsed.y}`,
+        title: (items) => items[0] ? items[0].label : ''
+    };
+    chart.update();
+
+    document.getElementById('statTotal').textContent = sum.toLocaleString();
+    document.getElementById('statAvg').textContent = data.length ? Math.round(sum / data.length).toLocaleString() : '0';
+    document.getElementById('statDays').textContent = data.length;
+}
+
+function formatDate(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/* ---------- Table ---------- */
+function renderTable() {
+    const tbody = document.getElementById('logTable');
+    const data = [...filteredLogs()].sort((a, b) => b.date.localeCompare(a.date));
+    tbody.innerHTML = '';
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#64748b;">No logs yet</td></tr>';
+        return;
+    }
+    data.forEach((l) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${formatDate(l.date)} <span style="color:#64748b;font-size:0.85rem;">(${l.date})</span></td>
+            <td><span class="badge-ok">${l.steps.toLocaleString()}</span></td>
+            <td><button class="btn-del" data-date="${l.date}" style="background:transparent;border:none;color:#ef4444;cursor:pointer;font-size:0.85rem;padding:4px 8px;border-radius:4px;">Delete</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.querySelectorAll('.btn-del').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            removeLog(btn.dataset.date);
+            renderAll();
+            toast('Log deleted');
+        });
+    });
+}
+
+function renderAll() {
+    renderChart();
+    renderTable();
+}
+
+/* ---------- Toast ---------- */
+function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+/* ---------- Wiring ---------- */
+document.getElementById('dateInput').value = todayISO();
+
+document.getElementById('btnToday').addEventListener('click', () => {
+    document.getElementById('dateInput').value = todayISO();
+});
+
+document.getElementById('btnAdd').addEventListener('click', () => {
+    const date = document.getElementById('dateInput').value;
+    const steps = document.getElementById('stepsInput').value;
+    if (!date) { toast('Pick a date'); return; }
+    if (steps === '') { toast('Enter steps'); return; }
+    addLog(date, steps);
+    document.getElementById('stepsInput').value = '';
+    renderAll();
+    toast('Logged');
+});
+
+document.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentFilter = chip.dataset.filter;
+        renderAll();
+    });
+});
+
+// Init
+load();
+initChart();
+renderAll();
+</script>
+</body>
+</html>
