@@ -363,6 +363,15 @@ document.querySelectorAll('.chip').forEach((chip) => {
 load();
 initChart();
 renderAll();
+
+/* ---------- Service Worker (cache) ---------- */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then((reg) => {
+    document.getElementById('cacheBadge').textContent = 'Cache: active';
+  }).catch(() => {
+    document.getElementById('cacheBadge').textContent = 'Cache: offline';
+  });
+}
 </script>
 </body>
 </html>
